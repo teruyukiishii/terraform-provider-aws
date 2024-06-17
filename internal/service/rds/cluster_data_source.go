@@ -43,8 +43,19 @@ func DataSourceCluster() *schema.Resource {
 				Required: true,
 			},
 			"cluster_members": {
-				Type:     schema.TypeSet,
-				Elem:     &schema.Schema{Type: schema.TypeString},
+				Type: schema.TypeSet,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"db_instance_identifier": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"db_cluster_parameter_group_status": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+					},
+				},
 				Computed: true,
 			},
 			"cluster_resource_id": {
@@ -174,7 +185,6 @@ func DataSourceCluster() *schema.Resource {
 func dataSourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
 	conn := meta.(*conns.AWSClient).RDSConn(ctx)
-	ignoreTagsConfig := meta.(*conns.AWSClient).IgnoreTagsConfig
 
 	dbClusterID := d.Get(names.AttrClusterIdentifier).(string)
 	dbc, err := FindDBClusterByID(ctx, conn, dbClusterID)
@@ -191,9 +201,12 @@ func dataSourceClusterRead(ctx context.Context, d *schema.ResourceData, meta int
 	d.Set("backtrack_window", dbc.BacktrackWindow)
 	d.Set("backup_retention_period", dbc.BackupRetentionPeriod)
 	d.Set(names.AttrClusterIdentifier, dbc.DBClusterIdentifier)
-	var clusterMembers []string
+	var clusterMembers []map[string]interface{}
 	for _, v := range dbc.DBClusterMembers {
-		clusterMembers = append(clusterMembers, aws.StringValue(v.DBInstanceIdentifier))
+		tfMap := map[string]interface{}{}
+		tfMap["db_instance_identifier"] = aws.StringValue(v.DBInstanceIdentifier)
+		tfMap["db_cluster_parameter_group_status"] = aws.StringValue(v.DBClusterParameterGroupStatus)
+		clusterMembers = append(clusterMembers, tfMap)
 	}
 	d.Set("cluster_members", clusterMembers)
 	d.Set("cluster_resource_id", dbc.DbClusterResourceId)
@@ -238,12 +251,6 @@ func dataSourceClusterRead(ctx context.Context, d *schema.ResourceData, meta int
 		securityGroupIDs = append(securityGroupIDs, aws.StringValue(v.VpcSecurityGroupId))
 	}
 	d.Set(names.AttrVPCSecurityGroupIDs, securityGroupIDs)
-
-	tags := KeyValueTags(ctx, dbc.TagList)
-
-	if err := d.Set(names.AttrTags, tags.IgnoreAWS().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
-		return sdkdiag.AppendErrorf(diags, "setting tags: %s", err)
-	}
 
 	return diags
 }

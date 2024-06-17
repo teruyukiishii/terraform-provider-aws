@@ -386,68 +386,6 @@ func (p *fwprovider) Resources(ctx context.Context) []func() resource.Resource {
 	var errs []error
 	var resources []func() resource.Resource
 
-	for _, sp := range p.Primary.Meta().(*conns.AWSClient).ServicePackages {
-		servicePackageName := sp.ServicePackageName()
-
-		for _, v := range sp.FrameworkResources(ctx) {
-			v := v
-			inner, err := v.Factory(ctx)
-
-			if err != nil {
-				errs = append(errs, fmt.Errorf("creating resource: %w", err))
-				continue
-			}
-
-			metadataResponse := resource.MetadataResponse{}
-			inner.Metadata(ctx, resource.MetadataRequest{}, &metadataResponse)
-			typeName := metadataResponse.TypeName
-
-			// bootstrapContext is run on all wrapped methods before any interceptors.
-			bootstrapContext := func(ctx context.Context, meta *conns.AWSClient) context.Context {
-				ctx = conns.NewResourceContext(ctx, servicePackageName, v.Name)
-				if meta != nil {
-					ctx = tftags.NewContext(ctx, meta.DefaultTagsConfig, meta.IgnoreTagsConfig)
-					ctx = meta.RegisterLogger(ctx)
-				}
-
-				return ctx
-			}
-			interceptors := resourceInterceptors{}
-
-			if v.Tags != nil {
-				// The resource has opted in to transparent tagging.
-				// Ensure that the schema look OK.
-				schemaResponse := resource.SchemaResponse{}
-				inner.Schema(ctx, resource.SchemaRequest{}, &schemaResponse)
-
-				if v, ok := schemaResponse.Schema.Attributes[names.AttrTags]; ok {
-					if v.IsComputed() {
-						errs = append(errs, fmt.Errorf("`%s` attribute cannot be Computed: %s", names.AttrTags, typeName))
-						continue
-					}
-				} else {
-					errs = append(errs, fmt.Errorf("no `%s` attribute defined in schema: %s", names.AttrTags, typeName))
-					continue
-				}
-				if v, ok := schemaResponse.Schema.Attributes[names.AttrTagsAll]; ok {
-					if !v.IsComputed() {
-						errs = append(errs, fmt.Errorf("`%s` attribute must be Computed: %s", names.AttrTagsAll, typeName))
-						continue
-					}
-				} else {
-					errs = append(errs, fmt.Errorf("no `%s` attribute defined in schema: %s", names.AttrTagsAll, typeName))
-					continue
-				}
-
-				interceptors = append(interceptors, tagsResourceInterceptor{tags: v.Tags})
-			}
-
-			resources = append(resources, func() resource.Resource {
-				return newWrappedResource(bootstrapContext, inner, interceptors)
-			})
-		}
-	}
-
 	if err := errors.Join(errs...); err != nil {
 		tflog.Warn(ctx, "registering resources", map[string]interface{}{
 			"error": err.Error(),

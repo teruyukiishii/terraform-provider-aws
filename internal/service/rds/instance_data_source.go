@@ -77,7 +77,18 @@ func DataSourceInstance() *schema.Resource {
 			"db_parameter_groups": {
 				Type:     schema.TypeList,
 				Computed: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"db_parameter_group_name": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"parameter_apply_status": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+					},
+				},
 			},
 			"db_subnet_group": {
 				Type:     schema.TypeString,
@@ -222,11 +233,6 @@ func dataSourceInstanceRead(ctx context.Context, d *schema.ResourceData, meta in
 	var instance *rds.DBInstance
 
 	filter := tfslices.PredicateTrue[*rds.DBInstance]()
-	if tags := getTagsIn(ctx); len(tags) > 0 {
-		filter = func(v *rds.DBInstance) bool {
-			return KeyValueTags(ctx, v.TagList).ContainsAll(KeyValueTags(ctx, tags))
-		}
-	}
 
 	if v, ok := d.GetOk("db_instance_identifier"); ok {
 		id := v.(string)
@@ -263,8 +269,11 @@ func dataSourceInstanceRead(ctx context.Context, d *schema.ResourceData, meta in
 	d.Set("db_instance_class", instance.DBInstanceClass)
 	d.Set("db_instance_port", instance.DbInstancePort)
 	d.Set("db_name", instance.DBName)
-	parameterGroupNames := tfslices.ApplyToAll(instance.DBParameterGroups, func(v *rds.DBParameterGroupStatus) string {
-		return aws.StringValue(v.DBParameterGroupName)
+	parameterGroupNames := tfslices.ApplyToAll(instance.DBParameterGroups, func(v *rds.DBParameterGroupStatus) map[string]interface{} {
+		tfMap := map[string]interface{}{}
+		tfMap["db_parameter_group_name"] = aws.StringValue(v.DBParameterGroupName)
+		tfMap["parameter_apply_status"] = aws.StringValue(v.ParameterApplyStatus)
+		return tfMap
 	})
 	d.Set("db_parameter_groups", parameterGroupNames)
 	if instance.DBSubnetGroup != nil {
@@ -320,8 +329,6 @@ func dataSourceInstanceRead(ctx context.Context, d *schema.ResourceData, meta in
 		d.Set(names.AttrHostedZoneID, nil)
 		d.Set(names.AttrPort, nil)
 	}
-
-	setTagsOut(ctx, instance.TagList)
 
 	return diags
 }

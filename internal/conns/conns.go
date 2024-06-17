@@ -13,9 +13,7 @@ import (
 // Its methods return the Plugin SDK and Framework resources and data sources implemented in the package.
 type ServicePackage interface {
 	FrameworkDataSources(context.Context) []*types.ServicePackageFrameworkDataSource
-	FrameworkResources(context.Context) []*types.ServicePackageFrameworkResource
 	SDKDataSources(context.Context) []*types.ServicePackageSDKDataSource
-	SDKResources(context.Context) []*types.ServicePackageSDKResource
 	ServicePackageName() string
 }
 

@@ -51,11 +51,6 @@ func dataSourceInstancesRead(ctx context.Context, d *schema.ResourceData, meta i
 	}
 
 	filter := tfslices.PredicateTrue[*rds.DBInstance]()
-	if v, ok := d.GetOk(names.AttrTags); ok {
-		filter = func(x *rds.DBInstance) bool {
-			return KeyValueTags(ctx, x.TagList).ContainsAll(tftags.New(ctx, v.(map[string]interface{})))
-		}
-	}
 
 	instances, err := findDBInstancesSDKv1(ctx, conn, input, filter)
 
